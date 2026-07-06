@@ -1,0 +1,39 @@
+generate_subject_plan_task:
+  description: >
+    You are planning ONLY for the subject: {subject_name}
+
+    Below is this subject's full structured syllabus (units, topics, sub_topics):
+
+    {subject_syllabus_json}
+
+    Below is the list of exam dates and assignment deadlines for the whole
+    term (only build buffer time around the ones relevant to {subject_name}):
+
+    {exams_and_deadlines_json}
+
+    Below is your PRE-ASSIGNED list of (date, available_hours) for this
+    subject — you may ONLY schedule on these exact dates, and must NEVER
+    exceed the paired available_hours for that date. These dates and hours
+    are fixed by an external scheduler; you do not choose them:
+
+    {day_budget_json}
+
+    Using only the days and hours listed above, decide which topic(s) from
+    the syllabus are covered on each day. Every "topic_name" you output MUST
+    be copied EXACTLY from the "topic_name" fields in the syllabus above —
+    you MUST NOT invent placeholder or summary labels such as "Final
+    Revision", "Mock Test", "Practice and Clarifications", or "Post Exam
+    Review" as if they were topics. Every real topic in the syllabus must
+    appear on at least one day before the last day in your budget. For
+    "buffer" or review time near an exam/deadline relevant to
+    {subject_name}, re-use one of that subject's REAL topic names again
+    (revisiting it) — do not create a new non-syllabus topic name for it.
+    Do not schedule on any date not in your budget, and do not exceed a
+    day's budgeted hours.
+  expected_output: >
+    A structured JSON object matching the StudyPlan schema: a "days" list,
+    each with a "date" (must be one of the pre-assigned budget dates) and an
+    "entries" list of {{subject, topic_name, hours_allocated}} objects (subject
+    must always be "{subject_name}"), covering every topic in this subject's
+    syllabus at least once and never exceeding that day's budgeted hours.
+  agent: plan_generator

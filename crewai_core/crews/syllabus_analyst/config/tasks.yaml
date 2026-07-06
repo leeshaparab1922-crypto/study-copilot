@@ -1,0 +1,15 @@
+analyze_syllabus_task:
+  description: >
+    Below is the raw syllabus JSON for one subject:
+
+    {raw_syllabus_json}
+
+    Restructure this into the required output schema. You MUST NOT add any
+    unit, topic, or sub-topic that does not already appear in the raw syllabus
+    JSON above. You MUST NOT drop any unit, topic, or sub-topic that does
+    appear in it. Preserve the grade, subject, unit names, and
+    weightage_percent values exactly as given.
+  expected_output: >
+    A structured JSON object matching the SyllabusStructure schema, containing
+    only units/topics/sub_topics present in the source syllabus JSON.
+  agent: syllabus_analyst

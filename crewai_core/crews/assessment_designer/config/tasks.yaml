@@ -1,0 +1,28 @@
+generate_quiz_task:
+  description: >
+    A student has directly requested a quiz for ONLY the subject:
+    {subject_name}, on ONLY the topic: {topic_name}.
+
+    Below is that subject's full syllabus structure, for context on how this
+    topic relates to its unit and sub-topics — but you MUST NOT write
+    questions about any topic other than "{topic_name}":
+
+    {subject_syllabus_json}
+
+    Write multiple-choice questions (4 options each, exactly one correct
+    answer) covering ONLY "{topic_name}", using its sub-topics (if any) from
+    the syllabus above for coverage — spread questions across all of that
+    topic's sub-topics rather than repeating the same sub-topic. Decide the
+    number of questions yourself based on the topic's complexity/number of
+    sub-topics, but write no fewer than 15 and no more than 25 questions
+    total. Every question's "topic_name" MUST be copied EXACTLY as
+    "{topic_name}", and every "subject" you output MUST be exactly
+    "{subject_name}".
+  expected_output: >
+    A structured JSON object matching the QuizSet schema: "subject" equal to
+    "{subject_name}", "topic_name" equal to "{topic_name}", and a
+    "questions" list of
+    {{subject, topic_name, question_text, options, correct_option_index}}
+    objects, with between 15 and 25 questions total, all scoped to
+    "{topic_name}" only.
+  agent: assessment_designer

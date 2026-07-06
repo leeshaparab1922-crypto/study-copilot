@@ -1,0 +1,44 @@
+optimize_plan_task:
+  description: >
+    A student is currently Struggling with at least one topic, so the
+    remaining part of their study plan needs to be revised.
+
+    Below is the student's current weak-topic status for EVERY (subject,
+    topic) pair attempted so far (status is one of Not Started, Struggling,
+    Improving, Mastered, based on their last several quiz attempts):
+
+    {weak_topics_json}
+
+    Below is the full syllabus for every subject in the student's plan (so
+    you know every real topic name you're allowed to use):
+
+    {all_syllabi_json}
+
+    Below is the REMAINING portion of the student's day-wise study plan —
+    only days from today onward, each with its ORIGINAL fixed hour budget
+    (you may reassign WHICH topics are covered on a day, but you must NEVER
+    exceed that day's listed hours, and you must NEVER add, remove, or
+    rename a date):
+
+    {remaining_plan_json}
+
+    Revise ONLY these remaining days. Prioritize giving more coverage
+    (e.g. revisiting on more days, or moving earlier) to subjects/topics
+    currently marked Struggling or Improving. You MAY drop a topic entirely
+    from these remaining days ONLY if its status above is Mastered — every
+    other (subject, topic) pair (Struggling, Improving, Not Started, or not
+    listed at all because it hasn't been attempted yet) MUST still appear
+    at least once somewhere in your revised remaining days. Every
+    "topic_name" you output MUST be copied EXACTLY from that subject's real
+    syllabus topics — never invent a placeholder label. Never schedule a
+    date not present in the remaining-days budget above, and never schedule
+    past the term's end date.
+  expected_output: >
+    A structured JSON object matching the PlanRevision schema: a "days"
+    list covering exactly the same dates as the remaining-days budget
+    provided (or a subset, if some days now have zero entries), each with
+    an "entries" list of {{subject, topic_name, hours_allocated}} objects,
+    where every non-Mastered (subject, topic) pair still appears at least
+    once, no day exceeds its original budgeted hours, and no date falls
+    outside the provided remaining-days budget or past term_end.
+  agent: plan_optimizer

@@ -1,0 +1,37 @@
+{
+  "term_start": "2026-07-06",
+  "term_end": "2026-10-31",
+  "exam_dates": [
+    { "name": "Mid-Term Examination", "date": "2026-08-25" },
+    { "name": "Final Examination - Mathematics", "date": "2026-10-20" },
+    { "name": "Final Examination - Physics", "date": "2026-10-22" },
+    { "name": "Final Examination - Chemistry", "date": "2026-10-24" },
+    { "name": "Final Examination - Biology", "date": "2026-10-26" },
+    { "name": "Final Examination - English", "date": "2026-10-28" },
+    { "name": "Final Examination - History", "date": "2026-10-30" }
+  ],
+  "assignment_deadlines": [
+    { "name": "Chemistry Lab Report", "date": "2026-07-31" },
+    { "name": "History Project Submission", "date": "2026-08-15" },
+    { "name": "English Essay Draft", "date": "2026-09-10" },
+    { "name": "Biology Practical File", "date": "2026-09-25" }
+  ],
+  "weekly_available_hours": {
+    "monday": 3,
+    "tuesday": 3,
+    "wednesday": 3,
+    "thursday": 3,
+    "friday": 2,
+    "saturday": 5,
+    "sunday": 4
+  },
+  "recurring_activities": [
+    { "name": "Sports Practice", "day": "monday", "hours_blocked": 1 },
+    { "name": "Music Class", "day": "wednesday", "hours_blocked": 1 },
+    { "name": "Family Time", "day": "sunday", "hours_blocked": 2 }
+  ],
+  "personal_gaps": [
+    { "reason": "Festival Break", "start_date": "2026-08-27", "end_date": "2026-08-29" },
+    { "reason": "Family Travel", "start_date": "2026-09-19", "end_date": "2026-09-21" }
+  ]
+}

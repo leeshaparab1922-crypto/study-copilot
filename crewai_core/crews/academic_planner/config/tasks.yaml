@@ -1,0 +1,17 @@
+parse_calendar_task:
+  description: >
+    Below is the raw academic calendar JSON for the student:
+
+    {raw_calendar_json}
+
+    Restructure this into the required output schema. You MUST NOT add,
+    remove, or alter any term date, exam date, assignment deadline, weekly
+    available hour value, recurring activity, or personal gap that appears
+    in the raw calendar JSON above. Preserve all dates and hour values
+    exactly as given, in YYYY-MM-DD format.
+  expected_output: >
+    A structured JSON object matching the CalendarStructure schema, containing
+    exactly the term dates, exam dates, assignment deadlines, weekly available
+    hours, recurring activities, and personal gaps present in the source
+    calendar JSON — nothing added, nothing omitted.
+  agent: academic_planner

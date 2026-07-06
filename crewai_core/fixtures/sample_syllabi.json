@@ -1,0 +1,221 @@
+[
+  {
+    "grade": "10",
+    "subject": "Mathematics",
+    "units": [
+      {
+        "unit_name": "Algebra",
+        "weightage_percent": 30,
+        "topics": [
+          { "topic_name": "Polynomials", "sub_topics": ["Zeroes of a polynomial", "Division algorithm"] },
+          { "topic_name": "Pair of Linear Equations", "sub_topics": ["Graphical method", "Substitution method", "Elimination method"] },
+          { "topic_name": "Quadratic Equations", "sub_topics": ["Factorization", "Completing the square", "Quadratic formula"] }
+        ]
+      },
+      {
+        "unit_name": "Geometry",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Triangles", "sub_topics": ["Similarity of triangles", "Pythagoras theorem"] },
+          { "topic_name": "Circles", "sub_topics": ["Tangent to a circle", "Number of tangents from a point"] }
+        ]
+      },
+      {
+        "unit_name": "Trigonometry",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "Introduction to Trigonometry", "sub_topics": ["Trigonometric ratios", "Trigonometric identities"] },
+          { "topic_name": "Heights and Distances", "sub_topics": ["Angle of elevation", "Angle of depression"] }
+        ]
+      },
+      {
+        "unit_name": "Statistics and Probability",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Statistics", "sub_topics": ["Mean, median, mode of grouped data"] },
+          { "topic_name": "Probability", "sub_topics": ["Theoretical probability", "Simple events"] }
+        ]
+      }
+    ]
+  },
+  {
+    "grade": "10",
+    "subject": "Physics",
+    "units": [
+      {
+        "unit_name": "Light",
+        "weightage_percent": 30,
+        "topics": [
+          { "topic_name": "Reflection of Light", "sub_topics": ["Spherical mirrors", "Mirror formula"] },
+          { "topic_name": "Refraction of Light", "sub_topics": ["Refractive index", "Lens formula", "Power of a lens"] }
+        ]
+      },
+      {
+        "unit_name": "Electricity",
+        "weightage_percent": 35,
+        "topics": [
+          { "topic_name": "Electric Current and Circuits", "sub_topics": ["Ohm's law", "Resistance in series and parallel"] },
+          { "topic_name": "Heating Effects of Current", "sub_topics": ["Electric power", "Joule's law of heating"] }
+        ]
+      },
+      {
+        "unit_name": "Magnetic Effects of Electric Current",
+        "weightage_percent": 35,
+        "topics": [
+          { "topic_name": "Magnetic Field", "sub_topics": ["Field due to a current-carrying conductor", "Right-hand thumb rule"] },
+          { "topic_name": "Electromagnetic Induction", "sub_topics": ["Fleming's rules", "Electric motor", "Electric generator"] }
+        ]
+      }
+    ]
+  },
+  {
+    "grade": "10",
+    "subject": "Chemistry",
+    "units": [
+      {
+        "unit_name": "Chemical Reactions",
+        "weightage_percent": 30,
+        "topics": [
+          { "topic_name": "Types of Chemical Reactions", "sub_topics": ["Combination", "Decomposition", "Displacement"] },
+          { "topic_name": "Oxidation and Reduction", "sub_topics": ["Redox reactions", "Corrosion", "Rancidity"] }
+        ]
+      },
+      {
+        "unit_name": "Acids, Bases and Salts",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Properties of Acids and Bases", "sub_topics": ["pH scale", "Neutralization reactions"] },
+          { "topic_name": "Common Salts", "sub_topics": ["Preparation and uses of NaCl, NaOH, bleaching powder"] }
+        ]
+      },
+      {
+        "unit_name": "Metals and Non-metals",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Physical and Chemical Properties", "sub_topics": ["Reactivity series", "Extraction of metals"] }
+        ]
+      },
+      {
+        "unit_name": "Carbon and its Compounds",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "Bonding in Carbon", "sub_topics": ["Covalent bonding", "Versatile nature of carbon"] },
+          { "topic_name": "Homologous Series", "sub_topics": ["Nomenclature", "Functional groups"] }
+        ]
+      }
+    ]
+  },
+  {
+    "grade": "10",
+    "subject": "Biology",
+    "units": [
+      {
+        "unit_name": "Life Processes",
+        "weightage_percent": 35,
+        "topics": [
+          { "topic_name": "Nutrition", "sub_topics": ["Autotrophic nutrition", "Heterotrophic nutrition"] },
+          { "topic_name": "Respiration", "sub_topics": ["Aerobic respiration", "Anaerobic respiration"] },
+          { "topic_name": "Transportation", "sub_topics": ["Circulatory system", "Transport in plants"] }
+        ]
+      },
+      {
+        "unit_name": "Control and Coordination",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "Nervous System", "sub_topics": ["Reflex action", "Human brain"] },
+          { "topic_name": "Hormones in Animals", "sub_topics": ["Endocrine glands"] }
+        ]
+      },
+      {
+        "unit_name": "Reproduction",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "Modes of Reproduction", "sub_topics": ["Asexual reproduction", "Sexual reproduction in plants"] }
+        ]
+      },
+      {
+        "unit_name": "Heredity and Evolution",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Heredity", "sub_topics": ["Mendel's laws", "Sex determination"] },
+          { "topic_name": "Evolution", "sub_topics": ["Evidence for evolution", "Speciation"] }
+        ]
+      }
+    ]
+  },
+  {
+    "grade": "10",
+    "subject": "English",
+    "units": [
+      {
+        "unit_name": "Prose",
+        "weightage_percent": 30,
+        "topics": [
+          { "topic_name": "Narrative Comprehension", "sub_topics": ["Character analysis", "Theme identification"] },
+          { "topic_name": "Critical Reading", "sub_topics": ["Inference", "Author's tone and purpose"] }
+        ]
+      },
+      {
+        "unit_name": "Poetry",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "Poetic Devices", "sub_topics": ["Metaphor", "Simile", "Alliteration"] },
+          { "topic_name": "Appreciation and Interpretation", "sub_topics": ["Central idea", "Poet's message"] }
+        ]
+      },
+      {
+        "unit_name": "Grammar",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Tenses and Voice", "sub_topics": ["Active and passive voice", "Reported speech"] },
+          { "topic_name": "Sentence Structure", "sub_topics": ["Clauses", "Conjunctions"] }
+        ]
+      },
+      {
+        "unit_name": "Writing Skills",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Formal Writing", "sub_topics": ["Letter writing", "Report writing"] },
+          { "topic_name": "Creative Writing", "sub_topics": ["Essay writing", "Story writing"] }
+        ]
+      }
+    ]
+  },
+  {
+    "grade": "10",
+    "subject": "History",
+    "units": [
+      {
+        "unit_name": "The Rise of Nationalism",
+        "weightage_percent": 30,
+        "topics": [
+          { "topic_name": "Nationalism in Europe", "sub_topics": ["French Revolution's impact", "Unification of Germany and Italy"] },
+          { "topic_name": "Nationalism in India", "sub_topics": ["Non-cooperation movement", "Civil disobedience movement"] }
+        ]
+      },
+      {
+        "unit_name": "Economic Transformation",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Industrialization", "sub_topics": ["Proto-industrialization", "Growth of factories"] },
+          { "topic_name": "Globalization", "sub_topics": ["Trade networks", "Silk routes"] }
+        ]
+      },
+      {
+        "unit_name": "Print Culture",
+        "weightage_percent": 20,
+        "topics": [
+          { "topic_name": "History of Print", "sub_topics": ["Print revolution in Europe", "Print culture in India"] }
+        ]
+      },
+      {
+        "unit_name": "Livelihoods and Society",
+        "weightage_percent": 25,
+        "topics": [
+          { "topic_name": "Novels, Society and History", "sub_topics": ["Rise of the novel as a genre"] },
+          { "topic_name": "Work and Life", "sub_topics": ["Urbanization", "Rise of factory labor"] }
+        ]
+      }
+    ]
+  }
+]
