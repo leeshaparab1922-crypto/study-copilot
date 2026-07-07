@@ -98,12 +98,16 @@ from crewai_core.models.flow_state import StudyPlanFlowState
 from crewai_core.models.plan_revision import PlanRevision
 from crewai_core.models.quiz import QuizSet
 from crewai_core.models.quiz_attempt import QuizAttempt
-from crewai_core.models.study_plan import DayPlan, StudyPlan
+from crewai_core.models.study_plan import DayPlan, EntryStatus, StudyPlan, StudyPlanEntry
 from crewai_core.models.syllabus import SyllabusStructure
 from crewai_core.models.weak_topic import TopicStatus, WeakTopicUpdate
 from crewai_core.models.wellbeing_flag import WellbeingFlag
 from crewai_core.performance_tracker import rollup_topic_status
-from crewai_core.wellbeing_monitor import check_inactivity_flag
+from crewai_core.wellbeing_monitor import (
+    check_inactivity_flag,
+    check_missed_days_flag,
+    current_missed_day_streak,
+)
 
 
 def merge_subject_plans(subject_plans: list[StudyPlan]) -> StudyPlan:
@@ -195,6 +199,7 @@ async def _optimize_remaining_plan(
     all_syllabi: list[SyllabusStructure],
     weak_topics: list[WeakTopicUpdate],
     term_end: str,
+    missed_day_streak: int = 0,
 ) -> PlanRevision:
     print("\n=== Starting plan optimization (Struggling topic detected) ===")
     optimizer_crew = PlanOptimizerCrew(
@@ -202,12 +207,14 @@ async def _optimize_remaining_plan(
         all_syllabi=all_syllabi,
         weak_topics=weak_topics,
         term_end=term_end,
+        missed_day_streak=missed_day_streak,
     )
     result = await optimizer_crew.crew().kickoff_async(
         inputs={
             "remaining_plan_json": optimizer_crew.remaining_plan_text,
             "all_syllabi_json": optimizer_crew.all_syllabi_text,
             "weak_topics_json": optimizer_crew.weak_topics_text,
+            "missed_day_context": optimizer_crew.missed_day_context_text,
         }
     )
     print("=== Finished plan optimization ===")
@@ -387,11 +394,19 @@ class StudyPlanFlow(Flow[StudyPlanFlowState]):
             print("\n=== Skipping plan optimization: no remaining days left in the term ===")
             return
 
+        # Task 6: enrich the optimizer's context with the student's current
+        # missed-day streak (computed against the FULL plan, past days
+        # included, since the streak looks backward from today — not a
+        # new trigger, purely informational context on top of the
+        # existing Struggling-topic trigger this method is already inside.
+        missed_day_streak = current_missed_day_streak(self.state.study_plan, today=today)
+
         revision = await _optimize_remaining_plan(
             remaining_days=remaining_days,
             all_syllabi=self.state.syllabi,
             weak_topics=self.state.weak_topics,
             term_end=self.state.calendar.term_end,
+            missed_day_streak=missed_day_streak,
         )
 
         self.state.study_plan = apply_plan_revision(past_days, revision)
@@ -400,29 +415,45 @@ class StudyPlanFlow(Flow[StudyPlanFlowState]):
             f"{len(revision.days)} remaining day(s) revised ==="
         )
 
-    def check_wellbeing(self) -> WellbeingFlag | None:
+    def check_wellbeing(self) -> list[WellbeingFlag]:
         """Step 8 — Wellbeing Monitor (Section 2.3 #6). Plain, deterministic
-        threshold check (NOT a Crew/agent, NOT sentiment/tone analysis).
+        threshold checks (NOT a Crew/agent, NOT sentiment/tone analysis).
         Runs independently of score_attempt()/generate_quiz() — invoked
         directly by the CLI's --check-wellbeing flag, or an HTTP route
         (confirmed with user).
 
-        If a flag is produced, it is appended to state.wellbeing_flags.
+        TWO independent checks (Task 5 added the second): quiz inactivity
+        (check_inactivity_flag) and a missed-scheduled-day streak
+        (check_missed_days_flag, crewai_core/wellbeing_monitor.py). Neither
+        replaces the other — a student can trigger either, both, or
+        neither in the same call. Returns a list (0, 1, or 2 flags) rather
+        than a single Optional, since both can genuinely fire at once; each
+        produced flag is appended to state.wellbeing_flags independently
+        (no merging/deduplication).
+
         Human review is asynchronous (no console pause here — this must be
         safe to call from inside an HTTP request, which has no terminal for
-        a person to type into): a person reviews and acknowledges the flag
+        a person to type into): a person reviews and acknowledges each flag
         later via acknowledge_wellbeing_flag(), decoupled from the request
         that raised it.
 
-        Returns None if no flag was warranted.
+        Returns an empty list if no flag was warranted.
         """
-        flag = check_inactivity_flag(self.state.quiz_history)
-        if flag is not None:
-            self.state.wellbeing_flags.append(flag)
-            print(f"\n=== WELLBEING FLAG: {flag.reason} ===")
+        flags = [
+            f
+            for f in (
+                check_inactivity_flag(self.state.quiz_history),
+                check_missed_days_flag(self.state.study_plan),
+            )
+            if f is not None
+        ]
+        if flags:
+            self.state.wellbeing_flags.extend(flags)
+            for flag in flags:
+                print(f"\n=== WELLBEING FLAG: {flag.reason} ===")
         else:
             print("\n=== Wellbeing check: no flag warranted ===")
-        return flag
+        return flags
 
     def acknowledge_wellbeing_flag(self, flag_id: str, reviewer_note: str) -> WellbeingFlag:
         """A human's asynchronous acknowledgment of a previously-raised
@@ -436,3 +467,34 @@ class StudyPlanFlow(Flow[StudyPlanFlowState]):
                 self.state.wellbeing_flags[i] = acknowledged
                 return acknowledged
         raise ValueError(f"No wellbeing flag found with id '{flag_id}'.")
+
+    def set_entry_status(
+        self, date_str: str, subject: str, topic_name: str, status: EntryStatus
+    ) -> StudyPlanEntry:
+        """Toggle one StudyPlanEntry's status by (date, subject, topic_name).
+        A plain, synchronous, deterministic method (NOT a Crew/agent) — same
+        category as score_attempt()/check_wellbeing(). "missed" is never a
+        settable value here (see EntryStatus/entry_status.py): it is derived
+        at read time only, never stored, so it cannot be passed as `status`.
+
+        Raises ValueError if state.study_plan is not ready yet, or if no
+        entry matches the given (date, subject, topic_name) triple — mirrors
+        generate_quiz()'s unknown-subject ValueError convention, so callers
+        map this the same way (422 in the backend route).
+        """
+        if self.state.study_plan is None:
+            raise ValueError("No study plan exists yet for this student.")
+
+        for day_plan in self.state.study_plan.days:
+            if day_plan.date != date_str:
+                continue
+            for i, entry in enumerate(day_plan.entries):
+                if entry.subject == subject and entry.topic_name == topic_name:
+                    updated = entry.model_copy(update={"status": status})
+                    day_plan.entries[i] = updated
+                    return updated
+
+        raise ValueError(
+            f"No study plan entry found for date={date_str!r}, subject={subject!r}, "
+            f"topic_name={topic_name!r}."
+        )

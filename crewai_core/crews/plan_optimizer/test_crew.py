@@ -38,21 +38,50 @@ from crewai_core.models.weak_topic import TopicStatus, WeakTopicUpdate
 FIXTURES_DIR = Path(__file__).parents[2] / "fixtures"
 
 
+async def _analyze_subject(entry: dict) -> SyllabusStructure:
+    crew_instance = SyllabusAnalystCrew(raw_syllabus=entry)
+    output = await crew_instance.crew().kickoff_async(
+        inputs={"raw_syllabus_json": crew_instance.raw_syllabus_text}
+    )
+    return output.pydantic
+
+
+async def _generate_subject_plan(
+    subject_syllabus: SyllabusStructure,
+    day_budget: list[tuple[str, float]],
+    calendar: CalendarStructure,
+):
+    plan_crew = PlanGeneratorCrew(
+        subject_syllabus=subject_syllabus, day_budget=day_budget, calendar=calendar
+    )
+    result = await plan_crew.crew().kickoff_async(
+        inputs={
+            "subject_name": plan_crew.subject_name,
+            "subject_syllabus_json": plan_crew.subject_syllabus_text,
+            "day_budget_json": plan_crew.day_budget_text,
+            "exams_and_deadlines_json": plan_crew.exams_and_deadlines_text,
+        }
+    )
+    return result.pydantic
+
+
 async def _build_sample_inputs():
     """Runs the real Step 2-4 pipeline for all sample subjects, to get one
-    real remaining-days StudyPlan slice to test the Plan Optimizer against."""
+    real remaining-days StudyPlan slice to test the Plan Optimizer against.
+
+    Both per-subject stages run CONCURRENTLY via asyncio.gather, same
+    pattern as run_academic_planner.py / crewai_core/flow.py (deviation #5
+    in docs/build/01-status-and-decisions.md) — this eval script previously
+    ran them sequentially, which was the sole reason it took several times
+    longer than the equivalent product-path pipeline for no benefit (same
+    output either way; PlanGeneratorCrew calls are independent per subject,
+    so there's no shared state to race on)."""
     with open(FIXTURES_DIR / "sample_syllabi.json", encoding="utf-8") as f:
         raw_syllabi = json.load(f)
     with open(FIXTURES_DIR / "sample_calendar.json", encoding="utf-8") as f:
         raw_calendar = json.load(f)
 
-    all_syllabi = []
-    for entry in raw_syllabi:
-        crew_instance = SyllabusAnalystCrew(raw_syllabus=entry)
-        output = await crew_instance.crew().kickoff_async(
-            inputs={"raw_syllabus_json": crew_instance.raw_syllabus_text}
-        )
-        all_syllabi.append(output.pydantic)
+    all_syllabi = list(await asyncio.gather(*(_analyze_subject(e) for e in raw_syllabi)))
 
     planner_crew = AcademicPlannerCrew(raw_calendar=raw_calendar)
     calendar_result = await planner_crew.crew().kickoff_async(
@@ -62,22 +91,14 @@ async def _build_sample_inputs():
 
     budget = allocate_days_to_subjects(calendar, all_syllabi)
 
-    subject_plans = []
-    for subject_syllabus in all_syllabi:
-        plan_crew = PlanGeneratorCrew(
-            subject_syllabus=subject_syllabus,
-            day_budget=budget[subject_syllabus.subject],
-            calendar=calendar,
+    subject_plans = list(
+        await asyncio.gather(
+            *(
+                _generate_subject_plan(s, budget[s.subject], calendar)
+                for s in all_syllabi
+            )
         )
-        result = await plan_crew.crew().kickoff_async(
-            inputs={
-                "subject_name": plan_crew.subject_name,
-                "subject_syllabus_json": plan_crew.subject_syllabus_text,
-                "day_budget_json": plan_crew.day_budget_text,
-                "exams_and_deadlines_json": plan_crew.exams_and_deadlines_text,
-            }
-        )
-        subject_plans.append(result.pydantic)
+    )
 
     study_plan: StudyPlan = merge_subject_plans(subject_plans)
     today = date.today().isoformat()

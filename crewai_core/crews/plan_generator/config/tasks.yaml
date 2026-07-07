@@ -30,10 +30,17 @@ generate_subject_plan_task:
     (revisiting it) — do not create a new non-syllabus topic name for it.
     Do not schedule on any date not in your budget, and do not exceed a
     day's budgeted hours.
+
+    Every entry also has a "status" field. This is NOT yours to decide —
+    it tracks the student's own real-world progress, which does not exist
+    yet for a plan you are only just now generating. You MUST set "status"
+    to exactly "not_started" on every single entry you output, with no
+    exceptions.
   expected_output: >
     A structured JSON object matching the StudyPlan schema: a "days" list,
     each with a "date" (must be one of the pre-assigned budget dates) and an
-    "entries" list of {{subject, topic_name, hours_allocated}} objects (subject
-    must always be "{subject_name}"), covering every topic in this subject's
-    syllabus at least once and never exceeding that day's budgeted hours.
+    "entries" list of {{subject, topic_name, hours_allocated, status}}
+    objects (subject must always be "{subject_name}", status must always be
+    "not_started"), covering every topic in this subject's syllabus at
+    least once and never exceeding that day's budgeted hours.
   agent: plan_generator
