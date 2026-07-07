@@ -18,11 +18,15 @@ Checks, in order:
      (so plain fidelity matching alone wouldn't catch it). If True, this is
      a hard rejection: there is no reviewable partial value in a
      wrong-subject draft, unlike an ambiguous per-topic classification.
-  3. Hallucination catch: every topic_name/sub_topic must have SOME
-     plausible (normalized, substring/token-overlap) match somewhere in
-     raw_index_text. Only a total absence of match fails the guardrail —
-     near-misses are allowed through (expected to be marked "uncertain" by
-     the agent, though the guardrail does not enforce that labeling).
+  3. Hallucination catch: every unit_name/topic_name/sub_topic must have
+     SOME plausible (normalized, substring/token-overlap) match somewhere
+     in raw_index_text. Only a total absence of match fails the guardrail
+     — near-misses are allowed through (expected to be marked "uncertain"
+     by the agent, though the guardrail does not enforce that labeling).
+     This is the check that catches an agent inventing a placeholder unit
+     (e.g. "Unspecified Unit", "Miscellaneous") to make weightage math
+     add up — confirmed via a live run where exactly this happened and was
+     caught here (see the task prompt's explicit ban on this too).
   4. Weightage math:
      - The sum of all NON-estimated (weightage_is_estimated=False) values
        must not exceed 100 by itself — if it does, this is bad/inconsistent
@@ -88,6 +92,12 @@ def make_syllabus_extractor_guardrail(subject_name: str, raw_index_text: str):
         problems: list[str] = []
 
         for unit in draft.units:
+            if not _plausible_match(unit.unit_name, normalized_source):
+                problems.append(
+                    f"Unit '{unit.unit_name}' has no plausible match anywhere in the "
+                    "source text — do not invent placeholder units (e.g. 'Unspecified "
+                    "Unit', 'Miscellaneous') to make weightage percentages add up."
+                )
             for topic in unit.topics:
                 if not _plausible_match(topic.topic_name, normalized_source):
                     problems.append(

@@ -25,7 +25,15 @@ extract_syllabus_task:
     extract:
       - Parse the text into units, each containing topics, each optionally
         containing sub_topics, based on the text's own heading/indentation
-        structure.
+        structure. The units list must contain ONLY units that are
+        genuinely, recognizably present in the raw text as real headings —
+        never add an extra unit (e.g. "Unspecified Unit", "Miscellaneous",
+        "Other Topics", "Remaining Content", or any similar placeholder)
+        for any reason, including to make weightage percentages add up to
+        100. There is no rule requiring every unit to appear in your
+        output to justify a weightage total — the weightage math (below)
+        is computed AFTER you've listed only the real units you found, not
+        the other way around.
       - Do NOT invent any unit, topic, or sub_topic that is not
         recognizably present in the raw text in some form.
       - Do NOT drop any line that clearly represents a unit, topic, or
@@ -40,12 +48,15 @@ extract_syllabus_task:
         setting weightage_is_estimated to false for that unit. For any
         unit where no stated weightage is found in the text, split the
         REMAINING percentage (100 minus the sum of all stated values found
-        elsewhere) equally across just those units, and set
-        weightage_is_estimated to true only for those units. If no unit
-        anywhere has a stated weightage, split 100 equally across all
-        units, all marked weightage_is_estimated true. Do NOT rescale or
-        normalize stated values you found in the text, even if they sum to
-        more than 100 — report them exactly as found.
+        elsewhere) equally across just those REAL units that lack one, and
+        set weightage_is_estimated to true only for those units. If no
+        unit anywhere has a stated weightage, split 100 equally across all
+        the REAL units you found, all marked weightage_is_estimated true.
+        Do NOT rescale or normalize stated values you found in the text,
+        even if they sum to more than 100 — report them exactly as found.
+        This weightage split only ever redistributes percentage across
+        units that are already in your output for real, textual reasons —
+        it is never, by itself, a reason to add a new unit.
 
     Output must match the SyllabusDraft schema exactly.
   expected_output: >

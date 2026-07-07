@@ -218,6 +218,40 @@ def test_invented_topic_fails():
     assert "no plausible match" in error
 
 
+def test_invented_placeholder_unit_fails():
+    # Regression test for a real failure observed in a live run: the model
+    # invented a "leftover" unit (e.g. "Unspecified Unit") purely to make
+    # its own weightage percentages add up to 100, rather than only
+    # redistributing weightage across units that are genuinely in the
+    # source text.
+    draft = SyllabusDraft(
+        grade="10",
+        subject="Mathematics",
+        units=[
+            SyllabusDraftUnit(
+                unit_name="Real Numbers",
+                weightage_percent=10,
+                weightage_is_estimated=False,
+                topics=[_topic("Euclid's Division Lemma")],
+            ),
+            SyllabusDraftUnit(
+                unit_name="Unspecified Unit 1",
+                weightage_percent=90,
+                weightage_is_estimated=True,
+                topics=[
+                    SyllabusDraftTopic(
+                        topic_name="Unspecified Topics", sub_topics=[], source_confidence="uncertain"
+                    )
+                ],
+            ),
+        ],
+    )
+    ok, error = _guardrail()(_fake_output(draft))
+    assert ok is False
+    assert "no plausible match" in error
+    assert "Unspecified Unit 1" in error
+
+
 def test_subject_mismatch_fails():
     draft = SyllabusDraft(
         grade="10",
