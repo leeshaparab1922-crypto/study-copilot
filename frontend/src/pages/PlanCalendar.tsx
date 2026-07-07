@@ -1,6 +1,8 @@
 import { useOutletContext } from 'react-router-dom'
 import { usePlanStatus } from '@/hooks/usePlan'
+import { useSetEntryStatus } from '@/hooks/useSetEntryStatus'
 import { ApiError } from '@/lib/api'
+import { deriveDisplayStatus, type DisplayStatus, type EntryStatus } from '@/lib/schemas/studyPlan'
 
 type Context = { studentId: string }
 
@@ -10,9 +12,71 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+// "missed" is never a selectable toggle target — it's display-only,
+// derived by deriveDisplayStatus. Cycling only ever moves between the 3
+// real, settable EntryStatus values.
+const NEXT_STATUS: Record<EntryStatus, EntryStatus> = {
+  not_started: 'in_progress',
+  in_progress: 'completed',
+  completed: 'not_started',
+}
+
+const STATUS_LABEL: Record<DisplayStatus, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  missed: 'Missed',
+}
+
+// Reuses the existing --status-* palette (built for weak-topic mastery
+// levels) rather than inventing new colors: not_started~not-started,
+// in_progress~improving (partial progress), completed~mastered (done),
+// missed~struggling (needs attention).
+const STATUS_TOKEN: Record<DisplayStatus, string> = {
+  not_started: 'not-started',
+  in_progress: 'improving',
+  completed: 'mastered',
+  missed: 'struggling',
+}
+
+function StatusBadge({
+  displayStatus,
+  onClick,
+  disabled,
+}: {
+  displayStatus: DisplayStatus
+  onClick?: () => void
+  disabled?: boolean
+}) {
+  const token = STATUS_TOKEN[displayStatus]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || !onClick}
+      title={onClick ? 'Click to update progress' : undefined}
+      style={{
+        flexShrink: 0,
+        marginLeft: 12,
+        fontSize: 11.5,
+        fontWeight: 600,
+        padding: '3px 10px',
+        borderRadius: 20,
+        border: 'none',
+        cursor: onClick ? 'pointer' : 'default',
+        color: `var(--status-${token})`,
+        background: `var(--status-${token}-bg)`,
+      }}
+    >
+      {STATUS_LABEL[displayStatus]}
+    </button>
+  )
+}
+
 export function PlanCalendar() {
   const { studentId } = useOutletContext<Context>()
   const planStatus = usePlanStatus(studentId)
+  const setEntryStatus = useSetEntryStatus(studentId)
 
   if (planStatus.isLoading) {
     return <p style={{ color: 'var(--ink-soft)' }}>Loading…</p>
@@ -85,28 +149,63 @@ export function PlanCalendar() {
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {day.entries.map((entry, j) => (
-                  <div
-                    key={j}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontSize: 14,
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      background: 'var(--paper-sunken)',
-                    }}
-                  >
-                    <span>
-                      <strong>{entry.subject}</strong>
-                      <span style={{ color: 'var(--ink-soft)' }}> — {entry.topic_name}</span>
-                    </span>
-                    <span className="tabular" style={{ color: 'var(--ink-faint)' }}>
-                      {entry.hours_allocated}h
-                    </span>
-                  </div>
-                ))}
+                {day.entries.map((entry, j) => {
+                  const displayStatus = deriveDisplayStatus(day.date, entry.status)
+                  const isUpdatingThis =
+                    setEntryStatus.isPending &&
+                    setEntryStatus.variables?.date === day.date &&
+                    setEntryStatus.variables?.subject === entry.subject &&
+                    setEntryStatus.variables?.topic_name === entry.topic_name
+
+                  return (
+                    <div
+                      key={j}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 14,
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        background: 'var(--paper-sunken)',
+                      }}
+                    >
+                      <span>
+                        <strong>{entry.subject}</strong>
+                        <span style={{ color: 'var(--ink-soft)' }}> — {entry.topic_name}</span>
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="tabular" style={{ color: 'var(--ink-faint)' }}>
+                          {entry.hours_allocated}h
+                        </span>
+                        <StatusBadge
+                          displayStatus={displayStatus}
+                          disabled={isUpdatingThis}
+                          onClick={
+                            // A "missed" entry is display-only — clicking it
+                            // still advances from its real underlying stored
+                            // status (not_started/in_progress), same as any
+                            // other entry; only "completed" cycles back to
+                            // not_started, matching NEXT_STATUS.
+                            () =>
+                              setEntryStatus.mutate({
+                                date: day.date,
+                                subject: entry.subject,
+                                topic_name: entry.topic_name,
+                                status: NEXT_STATUS[entry.status],
+                              })
+                          }
+                        />
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
+              {setEntryStatus.isError && (
+                <p style={{ color: 'var(--danger)', fontSize: 12.5, marginTop: 8 }}>
+                  Couldn't update that entry — try again.
+                </p>
+              )}
             </div>
           )
         })}

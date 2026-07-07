@@ -9,6 +9,8 @@ optimize_plan_task:
 
     {weak_topics_json}
 
+    {missed_day_context}
+
     Below is the full syllabus for every subject in the student's plan (so
     you know every real topic name you're allowed to use):
 
@@ -33,12 +35,25 @@ optimize_plan_task:
     syllabus topics — never invent a placeholder label. Never schedule a
     date not present in the remaining-days budget above, and never schedule
     past the term's end date.
+
+    Each entry below also carries a "status" field
+    (not_started/in_progress/completed) recording the student's own
+    progress on that entry so far. You MUST preserve this signal exactly:
+    if an entry you keep unchanged (same date, subject, and topic_name as
+    it appeared in the remaining-days budget above) already has status
+    "completed" or "in_progress", copy that exact status forward — do NOT
+    reset it to "not_started". Only entries you newly schedule, or move to
+    a different date/topic than they originally had, should be
+    "not_started". Never invent completed/in_progress status for an entry
+    that did not already have it.
   expected_output: >
     A structured JSON object matching the PlanRevision schema: a "days"
     list covering exactly the same dates as the remaining-days budget
     provided (or a subset, if some days now have zero entries), each with
-    an "entries" list of {{subject, topic_name, hours_allocated}} objects,
-    where every non-Mastered (subject, topic) pair still appears at least
-    once, no day exceeds its original budgeted hours, and no date falls
-    outside the provided remaining-days budget or past term_end.
+    an "entries" list of {{subject, topic_name, hours_allocated, status}}
+    objects, where every non-Mastered (subject, topic) pair still appears
+    at least once, no day exceeds its original budgeted hours, no date
+    falls outside the provided remaining-days budget or past term_end, and
+    every kept-unchanged entry's original status (completed/in_progress)
+    is preserved rather than reset to not_started.
   agent: plan_optimizer

@@ -39,7 +39,7 @@ from crewai_core.models.calendar import CalendarStructure
 from crewai_core.models.plan_revision import PlanRevision
 from crewai_core.models.quiz import QuizQuestion, QuizSet
 from crewai_core.models.quiz_attempt import QuestionAnswer, QuizAttempt
-from crewai_core.models.study_plan import DayPlan, StudyPlan, StudyPlanEntry
+from crewai_core.models.study_plan import DayPlan, EntryStatus, StudyPlan, StudyPlanEntry
 from crewai_core.models.syllabus import SyllabusStructure, SyllabusTopic, SyllabusUnit
 from crewai_core.models.syllabus_draft import SyllabusDraft
 from crewai_core.models.weak_topic import TopicStatus
@@ -303,6 +303,94 @@ def test_get_job_unknown_404(client):
     assert resp.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# PATCH /students/{id}/plan/entries — set_entry_status
+# ---------------------------------------------------------------------------
+
+
+def _create_plan_with_entry(student_id: str, status=None):
+    """Build a Flow directly via the registry with a known single-entry
+    study plan, bypassing /plan and any Crew calls — same pattern as
+    _create_plan_without_llm, since this route needs no LLM involvement."""
+    flow, lock = registry.create_or_replace(student_id, RAW_SYLLABI, RAW_CALENDAR)
+    entry_kwargs = {"subject": SUBJECT, "topic_name": TOPIC, "hours_allocated": 2.0}
+    if status is not None:
+        entry_kwargs["status"] = status
+    flow.state.study_plan = StudyPlan(
+        days=[DayPlan(date="2026-07-10", entries=[StudyPlanEntry(**entry_kwargs)])]
+    )
+    return flow, lock
+
+
+def test_set_entry_status_happy_path_full_cycle(client):
+    _create_plan_with_entry("student-status")
+
+    for target_status in ("in_progress", "completed", "not_started"):
+        resp = client.patch(
+            "/students/student-status/plan/entries",
+            json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": target_status},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == target_status
+
+    flow, _ = registry.get("student-status")
+    assert flow.state.study_plan.days[0].entries[0].status == EntryStatus.NOT_STARTED
+
+
+def test_set_entry_status_unknown_student_404(client):
+    resp = client.patch(
+        "/students/nobody/plan/entries",
+        json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+    )
+    assert resp.status_code == 404
+
+
+def test_set_entry_status_unknown_entry_422(client):
+    _create_plan_with_entry("student-status-2")
+
+    resp = client.patch(
+        "/students/student-status-2/plan/entries",
+        json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": "Not A Real Topic", "status": "completed"},
+    )
+    assert resp.status_code == 422
+
+
+def test_set_entry_status_before_plan_ready_422(client):
+    # Registered but state.study_plan is still None — no plan generated yet.
+    registry.create_or_replace("student-status-3", RAW_SYLLABI, RAW_CALENDAR)
+
+    resp = client.patch(
+        "/students/student-status-3/plan/entries",
+        json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+    )
+    assert resp.status_code == 422
+
+
+def test_set_entry_status_does_not_affect_sibling_entries(client):
+    flow, _ = registry.create_or_replace("student-status-4", RAW_SYLLABI, RAW_CALENDAR)
+    flow.state.study_plan = StudyPlan(
+        days=[
+            DayPlan(
+                date="2026-07-10",
+                entries=[
+                    StudyPlanEntry(subject=SUBJECT, topic_name=TOPIC, hours_allocated=1.0),
+                    StudyPlanEntry(subject=SUBJECT, topic_name="Other Topic", hours_allocated=1.0),
+                ],
+            ),
+        ]
+    )
+
+    resp = client.patch(
+        "/students/student-status-4/plan/entries",
+        json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+    )
+    assert resp.status_code == 200
+
+    entries = flow.state.study_plan.days[0].entries
+    assert entries[0].status == EntryStatus.COMPLETED
+    assert entries[1].status == EntryStatus.NOT_STARTED  # untouched sibling
+
+
 def test_quiz_happy_path(client, monkeypatch):
     _fake_execute_task(monkeypatch)
     _create_plan(client)
@@ -331,13 +419,61 @@ def test_wellbeing_check_does_not_block(client):
     assert elapsed < 5.0
 
 
+def test_wellbeing_check_returns_empty_list_when_nothing_warranted(client):
+    _create_plan_without_llm("student-wb-empty")
+    resp = client.post("/students/student-wb-empty/wellbeing-check")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_wellbeing_check_returns_list_with_quiz_inactivity_flag(client):
+    _create_plan_without_llm("student-wb-quiz", backdate_days=10)
+    resp = client.post("/students/student-wb-quiz/wellbeing-check")
+    assert resp.status_code == 200
+    flags = resp.json()
+    assert len(flags) == 1
+    assert flags[0]["days_since_last_activity"] == 10
+
+
+def test_wellbeing_check_returns_both_flags_when_both_conditions_met(client):
+    """Task 5: quiz inactivity and missed-day streak are independent — both
+    can fire in the same call. Seeds a Flow with 10-day-stale quiz history
+    AND a study_plan with a missed-day streak past MISSED_DAYS_THRESHOLD."""
+    from crewai_core.models.study_plan import DayPlan, EntryStatus, StudyPlan, StudyPlanEntry
+    from crewai_core.wellbeing_monitor import MISSED_DAYS_THRESHOLD
+
+    flow, _ = _create_plan_without_llm("student-wb-both", backdate_days=10)
+    today = date.today()
+    missed_dates = [(today - timedelta(days=i)).isoformat() for i in range(1, MISSED_DAYS_THRESHOLD + 1)]
+    flow.state.study_plan = StudyPlan(
+        days=[
+            DayPlan(
+                date=d,
+                entries=[
+                    StudyPlanEntry(
+                        subject=SUBJECT, topic_name=TOPIC, hours_allocated=1.0,
+                        status=EntryStatus.NOT_STARTED,
+                    )
+                ],
+            )
+            for d in missed_dates
+        ]
+    )
+
+    resp = client.post("/students/student-wb-both/wellbeing-check")
+    assert resp.status_code == 200
+    flags = resp.json()
+    assert len(flags) == 2
+
+
 def test_wellbeing_ack_lifecycle(client):
     flow, _ = _create_plan_without_llm("student-wb2", backdate_days=10)
 
     resp = client.post("/students/student-wb2/wellbeing-check")
     assert resp.status_code == 200
-    flag = resp.json()
-    assert flag is not None
+    flags = resp.json()
+    assert len(flags) == 1
+    flag = flags[0]
     assert flag["acknowledged"] is False
 
     ack_resp = client.post(

@@ -11,13 +11,20 @@ SyllabusStructure and its pre-computed day/hour budget
      budget (no inventing extra days).
   4. No day's allocated hours exceed that day's budgeted hours for this
      subject.
+  5. Every entry's status is exactly "not_started" — a freshly generated
+     plan has no real-world student progress yet, so the LLM must not
+     invent "in_progress"/"completed" values for a field it doesn't own
+     (discovered live: without this check, the model would pick essentially
+     random status values, which then confused the Plan Optimizer's
+     status-preservation guardrail into "protecting" progress the student
+     never actually made).
 """
 
 from typing import Any
 
 from crewai import TaskOutput
 
-from crewai_core.models.study_plan import StudyPlan
+from crewai_core.models.study_plan import EntryStatus, StudyPlan
 from crewai_core.models.syllabus import SyllabusStructure
 
 
@@ -59,6 +66,13 @@ def make_subject_plan_guardrail(
                     problems.append(
                         f"Day {day_plan.date} references topic '{entry.topic_name}', which "
                         f"is not present in {subject_name}'s syllabus — do not invent topics."
+                    )
+                if entry.status != EntryStatus.NOT_STARTED:
+                    problems.append(
+                        f"Day {day_plan.date} entry for topic '{entry.topic_name}' has status "
+                        f"'{entry.status.value}', but a freshly generated plan must set every "
+                        "entry's status to 'not_started' — this field tracks real student "
+                        "progress, which does not exist yet."
                     )
                 covered_topics.add(entry.topic_name)
 

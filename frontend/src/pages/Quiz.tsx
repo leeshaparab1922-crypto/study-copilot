@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useCreateQuiz, useSubmitAttempt } from '@/hooks/useQuiz'
-import { QuestionCard, type QuestionAnswerDraft } from '@/components/quiz/QuestionCard'
 import { useSyllabi } from '@/hooks/useSyllabi'
+import { QuestionCard, type QuestionAnswerDraft } from '@/components/quiz/QuestionCard'
 import { QuizResult } from '@/components/quiz/QuizResult'
 import { JobStatus } from '@/components/shared/JobStatus'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
@@ -20,7 +20,7 @@ export function Quiz() {
   const syllabiQuery = useSyllabi(studentId)
 
   const quiz = createQuiz.job?.result
-   const syllabi = useMemo(() => syllabiQuery.data ?? [], [syllabiQuery.data])
+  const syllabi = useMemo(() => syllabiQuery.data ?? [], [syllabiQuery.data])
 
   // Every topic (flattened across units) for the currently-selected subject,
   // in syllabus order — the same source generate_quiz() validates against,
@@ -114,10 +114,10 @@ export function Quiz() {
             No subjects yet — build a study plan first, then come back here to request a quiz.
           </p>
         )}
+
         <label>
           <span className="field-label">Subject</span>
-        </label>
-         <select value={subject} onChange={(e) => setSubject(e.target.value)} className="field-input" disabled={syllabi.length === 0}>
+          <select value={subject} onChange={(e) => setSubject(e.target.value)} className="field-input" disabled={syllabi.length === 0}>
             <option value="">Select a subject…</option>
             {syllabi.map((s) => (
               <option key={s.subject} value={s.subject}>
@@ -125,9 +125,9 @@ export function Quiz() {
               </option>
             ))}
           </select>
+        </label>
         <label>
           <span className="field-label">Topic</span>
-          
           <select value={topic} onChange={(e) => setTopic(e.target.value)} className="field-input" disabled={!subject}>
             <option value="">Select a topic…</option>
             {topicsForSubject.map((topicName) => (

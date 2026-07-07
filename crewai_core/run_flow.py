@@ -131,9 +131,10 @@ async def _run(
             )
 
     if check_wellbeing:
-        flag = flow.check_wellbeing()
-        if flag is not None:
-            print(f"\n=== Wellbeing check result: FLAGGED — {flag.reason} ===")
+        flags = flow.check_wellbeing()
+        if flags:
+            for flag in flags:
+                print(f"\n=== Wellbeing check result: FLAGGED — {flag.reason} ===")
         else:
             print("\n=== Wellbeing check result: no flag ===")
 

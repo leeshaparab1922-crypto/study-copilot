@@ -37,6 +37,7 @@ from backend import jobs, registry
 from backend.errors import job_not_found_error, student_not_found_error
 from crewai_core.crews.syllabus_extractor.crew import SyllabusExtractorCrew
 from crewai_core.models.quiz_attempt import QuizAttempt
+from crewai_core.models.study_plan import EntryStatus
 from crewai_core.models.syllabus import SyllabusStructure, SyllabusTopic, SyllabusUnit
 from crewai_core.models.syllabus_draft import SyllabusDraft
 
@@ -67,6 +68,13 @@ class QuizRequest(BaseModel):
 class WellbeingAckRequest(BaseModel):
     flag_id: str
     reviewer_note: str
+
+
+class SetEntryStatusRequest(BaseModel):
+    date: str
+    subject: str
+    topic_name: str
+    status: EntryStatus
 
 
 def _get_flow_and_lock(student_id: str):
@@ -169,6 +177,31 @@ async def get_plan(student_id: str) -> dict[str, Any]:
         return {"ready": False, "study_plan": None}
     return {"ready": True, "study_plan": study_plan.model_dump()}
 
+
+@router.patch("/students/{student_id}/plan/entries")
+async def set_entry_status(student_id: str, body: SetEntryStatusRequest) -> dict[str, Any]:
+    """Toggle one study-plan entry's status (not_started/in_progress/
+    completed — never "missed", which is derived read-side only, see
+    crewai_core/entry_status.py). Plain, synchronous, deterministic — same
+    category as /wellbeing-check and /wellbeing-ack, NOT job-polled like
+    /plan, /quiz, /attempts, since no LLM call is involved.
+
+    404 if no Flow exists yet for student_id. 422 if the study plan isn't
+    ready yet, or no entry matches the given (date, subject, topic_name)
+    triple — StudyPlanFlow.set_entry_status() raises ValueError for both,
+    mapped directly to 422 here since this route isn't job-polled (compare
+    backend.errors.classify_job_exception's async equivalent for /quiz)."""
+    flow, lock = _get_flow_and_lock(student_id)
+    async with lock:
+        try:
+            updated_entry = flow.set_entry_status(
+                body.date, body.subject, body.topic_name, body.status
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return updated_entry.model_dump(mode="json")
+
+
 @router.get("/students/{student_id}/syllabi")
 async def get_syllabi(student_id: str) -> list[dict[str, Any]]:
     """The per-subject SyllabusStructure trees (units -> topics) built for
@@ -185,6 +218,7 @@ async def get_syllabi(student_id: str) -> list[dict[str, Any]]:
     async with lock:
         syllabi = flow.state.syllabi
     return [s.model_dump() for s in syllabi]
+
 
 @router.post("/students/{student_id}/quiz", status_code=202)
 async def create_quiz(student_id: str, body: QuizRequest) -> dict[str, str]:
@@ -216,11 +250,16 @@ async def submit_attempt(student_id: str, attempt: QuizAttempt) -> dict[str, str
 
 
 @router.post("/students/{student_id}/wellbeing-check")
-async def wellbeing_check(student_id: str) -> dict[str, Any] | None:
+async def wellbeing_check(student_id: str) -> list[dict[str, Any]]:
+    """Runs BOTH wellbeing checks (quiz inactivity, missed-day streak — see
+    crewai_core/wellbeing_monitor.py) and returns every flag produced (0,
+    1, or 2 — both can genuinely fire in the same call). Was a single
+    nullable flag before Task 5 added the second check; callers must now
+    handle a list, empty when nothing was warranted."""
     flow, lock = _get_flow_and_lock(student_id)
     async with lock:
-        flag = flow.check_wellbeing()
-    return flag.model_dump() if flag is not None else None
+        flags = flow.check_wellbeing()
+    return [f.model_dump() for f in flags]
 
 
 @router.post("/students/{student_id}/wellbeing-ack")

@@ -37,11 +37,13 @@ class PlanOptimizerCrew:
         all_syllabi: list[SyllabusStructure],
         weak_topics: list[WeakTopicUpdate],
         term_end: str,
+        missed_day_streak: int = 0,
     ):
         self.remaining_days = remaining_days
         self.all_syllabi = all_syllabi
         self.weak_topics = weak_topics
         self.term_end = term_end
+        self.missed_day_streak = missed_day_streak
 
         self.remaining_day_budgets = {
             day.date: sum(entry.hours_allocated for entry in day.entries) for day in remaining_days
@@ -55,6 +57,28 @@ class PlanOptimizerCrew:
         self.weak_topics_text = json.dumps(
             [wt.model_dump(mode="json") for wt in weak_topics], ensure_ascii=False
         )
+        # Informational context only (Task 6) — NOT a new guardrail input,
+        # NOT a new trigger condition. The existing Struggling-topic trigger
+        # (StudyPlanFlow._maybe_trigger_plan_optimizer) is unchanged; this
+        # just lets the agent additionally factor in "the student is
+        # currently N days behind schedule" when it reprioritizes. 0 means
+        # no current missed-day streak (the common case), rendered as a
+        # plain sentence rather than a raw number so the prompt reads
+        # naturally either way.
+        if missed_day_streak > 0:
+            self.missed_day_context_text = (
+                f"The student is currently on a {missed_day_streak}-day consecutive "
+                "streak of missed scheduled study days (days that have passed with "
+                "none of that day's entries completed or in progress). Take this into "
+                "account as context on how far behind schedule the student currently "
+                "is, alongside the weak-topic status above — but this is informational "
+                "only, not a new hard requirement on top of the ones already stated."
+            )
+        else:
+            self.missed_day_context_text = (
+                "The student has no current missed-day streak (no consecutive run of "
+                "fully-missed scheduled days ending today)."
+            )
 
     @agent
     def plan_optimizer(self) -> Agent:
@@ -72,7 +96,11 @@ class PlanOptimizerCrew:
             agent=self.plan_optimizer(),
             output_pydantic=PlanRevision,
             guardrail=make_plan_optimizer_guardrail(
-                self.remaining_day_budgets, self.term_end, self.all_syllabi, self.weak_topics
+                self.remaining_day_budgets,
+                self.term_end,
+                self.all_syllabi,
+                self.weak_topics,
+                original_remaining_days=self.remaining_days,
             ),
             guardrail_max_retries=3,
         )
