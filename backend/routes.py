@@ -30,11 +30,13 @@ GET /jobs/{job_id} rather than getting it synchronously from the POST.
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend import jobs, registry
+from backend.auth import require_owner
 from backend.errors import job_not_found_error, student_not_found_error
+from backend.tokens import issue_token
 from crewai_core.crews.syllabus_extractor.crew import SyllabusExtractorCrew
 from crewai_core.models.quiz_attempt import QuizAttempt
 from crewai_core.models.study_plan import EntryStatus
@@ -75,6 +77,10 @@ class SetEntryStatusRequest(BaseModel):
     subject: str
     topic_name: str
     status: EntryStatus
+
+
+class IssueTokenRequest(BaseModel):
+    student_id: str
 
 
 def _get_flow_and_lock(student_id: str):
@@ -130,8 +136,31 @@ async def _convert_subject(subject: RawSubjectSyllabus) -> SyllabusStructure:
     )
 
 
+@router.post("/auth/token")
+async def issue_student_token(body: IssueTokenRequest) -> dict[str, str]:
+    """Mints a signed token asserting the given student_id — NO credential
+    check whatsoever. This app has no login/account system today (any
+    caller can already address any student_id directly in a URL), so this
+    endpoint doesn't pretend to verify the requester actually "owns" that
+    student_id at mint time; it just issues a token for whatever student_id
+    is given, matching the current no-account model exactly.
+
+    The security property this token provides is downstream, not here: once
+    issued, backend.auth.require_owner (wired onto every /students/{id}/...
+    route) ensures a request's token must match the student_id in its own
+    URL path, which stops casual URL-editing from reading/mutating a
+    different student's data. It is not an authentication system in the
+    login-credential sense — it's an ownership-assertion token for a
+    no-account app.
+    """
+    token = issue_token(body.student_id)
+    return {"token": token, "student_id": body.student_id}
+
+
 @router.post("/students/{student_id}/plan", status_code=202)
-async def create_plan(student_id: str, body: CreatePlanRequest) -> dict[str, str]:
+async def create_plan(
+    student_id: str, body: CreatePlanRequest, _owner: str = Depends(require_owner)
+) -> dict[str, str]:
     """Converts every subject's raw text straight into a syllabus, then
     kicks off the Flow — one path, no intermediate draft/review/confirm
     step, and no redundant second AI pass through SyllabusAnalystCrew
@@ -163,7 +192,7 @@ async def get_job(job_id: str) -> dict[str, Any]:
 
 
 @router.get("/students/{student_id}/plan")
-async def get_plan(student_id: str) -> dict[str, Any]:
+async def get_plan(student_id: str, _owner: str = Depends(require_owner)) -> dict[str, Any]:
     """404 if no Flow exists yet for student_id. If the Flow exists but
     study_plan is still None (the /plan job hasn't completed yet), returns
     200 with ready=False instead of a 404 — this is a real Flow in an
@@ -179,7 +208,9 @@ async def get_plan(student_id: str) -> dict[str, Any]:
 
 
 @router.patch("/students/{student_id}/plan/entries")
-async def set_entry_status(student_id: str, body: SetEntryStatusRequest) -> dict[str, Any]:
+async def set_entry_status(
+    student_id: str, body: SetEntryStatusRequest, _owner: str = Depends(require_owner)
+) -> dict[str, Any]:
     """Toggle one study-plan entry's status (not_started/in_progress/
     completed — never "missed", which is derived read-side only, see
     crewai_core/entry_status.py). Plain, synchronous, deterministic — same
@@ -203,7 +234,7 @@ async def set_entry_status(student_id: str, body: SetEntryStatusRequest) -> dict
 
 
 @router.get("/students/{student_id}/syllabi")
-async def get_syllabi(student_id: str) -> list[dict[str, Any]]:
+async def get_syllabi(student_id: str, _owner: str = Depends(require_owner)) -> list[dict[str, Any]]:
     """The per-subject SyllabusStructure trees (units -> topics) built for
     this student's plan — the same data StudyPlanFlow.generate_quiz()
     validates a quiz request against. Lets the frontend offer subject/topic
@@ -221,7 +252,9 @@ async def get_syllabi(student_id: str) -> list[dict[str, Any]]:
 
 
 @router.post("/students/{student_id}/quiz", status_code=202)
-async def create_quiz(student_id: str, body: QuizRequest) -> dict[str, str]:
+async def create_quiz(
+    student_id: str, body: QuizRequest, _owner: str = Depends(require_owner)
+) -> dict[str, str]:
     flow, lock = _get_flow_and_lock(student_id)
 
     async def _generate() -> dict[str, Any]:
@@ -234,7 +267,9 @@ async def create_quiz(student_id: str, body: QuizRequest) -> dict[str, str]:
 
 
 @router.post("/students/{student_id}/attempts", status_code=202)
-async def submit_attempt(student_id: str, attempt: QuizAttempt) -> dict[str, str]:
+async def submit_attempt(
+    student_id: str, attempt: QuizAttempt, _owner: str = Depends(require_owner)
+) -> dict[str, str]:
     flow, lock = _get_flow_and_lock(student_id)
 
     async def _score() -> dict[str, Any]:
@@ -250,7 +285,9 @@ async def submit_attempt(student_id: str, attempt: QuizAttempt) -> dict[str, str
 
 
 @router.post("/students/{student_id}/wellbeing-check")
-async def wellbeing_check(student_id: str) -> list[dict[str, Any]]:
+async def wellbeing_check(
+    student_id: str, _owner: str = Depends(require_owner)
+) -> list[dict[str, Any]]:
     """Runs BOTH wellbeing checks (quiz inactivity, missed-day streak — see
     crewai_core/wellbeing_monitor.py) and returns every flag produced (0,
     1, or 2 — both can genuinely fire in the same call). Was a single
@@ -263,7 +300,9 @@ async def wellbeing_check(student_id: str) -> list[dict[str, Any]]:
 
 
 @router.post("/students/{student_id}/wellbeing-ack")
-async def wellbeing_ack(student_id: str, body: WellbeingAckRequest) -> dict[str, Any]:
+async def wellbeing_ack(
+    student_id: str, body: WellbeingAckRequest, _owner: str = Depends(require_owner)
+) -> dict[str, Any]:
     flow, lock = _get_flow_and_lock(student_id)
     async with lock:
         try:

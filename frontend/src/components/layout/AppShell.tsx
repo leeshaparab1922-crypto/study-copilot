@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { getOrCreateStudentId, setStudentId } from '@/lib/studentId'
+import { useAuthToken } from '@/hooks/useAuthToken'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -15,6 +16,8 @@ export function AppShell() {
   const [studentId, setStudentIdState] = useState(() => getOrCreateStudentId())
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(studentId)
+  const authToken = useAuthToken(studentId)
+  const token = authToken.data ?? null
 
   useEffect(() => {
     setDraft(studentId)
@@ -147,7 +150,7 @@ export function AppShell() {
       </aside>
 
       <main style={{ padding: '36px 44px', maxWidth: 960 }}>
-        <Outlet context={{ studentId }} />
+        <Outlet context={{ studentId, token }} />
       </main>
     </div>
   )

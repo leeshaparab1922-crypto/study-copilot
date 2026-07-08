@@ -3,11 +3,11 @@ import { usePlanStatus } from '@/hooks/usePlan'
 import { ApiError } from '@/lib/api'
 import { BarChart } from '@/components/shared/BarChart'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 export function Analytics() {
-  const { studentId } = useOutletContext<Context>()
-  const planStatus = usePlanStatus(studentId)
+  const { studentId, token } = useOutletContext<Context>()
+  const planStatus = usePlanStatus(studentId, token)
 
   if (planStatus.isLoading) {
     return <p style={{ color: 'var(--ink-soft)' }}>Loading…</p>

@@ -4,7 +4,7 @@ import { useWellbeingAck, useWellbeingCheck } from '@/hooks/useWellbeing'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import type { WellbeingFlag } from '@/lib/schemas/wellbeing'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 function FlagCard({
   flag,
@@ -91,9 +91,9 @@ function FlagCard({
 }
 
 export function Wellbeing() {
-  const { studentId } = useOutletContext<Context>()
-  const check = useWellbeingCheck(studentId)
-  const ack = useWellbeingAck(studentId)
+  const { studentId, token } = useOutletContext<Context>()
+  const check = useWellbeingCheck(studentId, token)
+  const ack = useWellbeingAck(studentId, token)
   // undefined = no check run yet; [] = checked, nothing warranted; non-empty
   // = one or both checks fired (quiz inactivity, missed-day streak — see
   // crewai_core/wellbeing_monitor.py — can both fire in the same check).

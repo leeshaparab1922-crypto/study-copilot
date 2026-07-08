@@ -17,16 +17,16 @@ import { wellbeingFlagSchema, type WellbeingFlag } from '@/lib/schemas/wellbeing
  * checks that just ran (freshly created), not a running history. The page
  * below only ever shows "the flag(s) from your last check."
  */
-export function useWellbeingCheck(studentId: string) {
+export function useWellbeingCheck(studentId: string, token: string | null) {
   return useMutation<WellbeingFlag[], ApiError>({
-    mutationFn: () => api.post(`/students/${studentId}/wellbeing-check`, z.array(wellbeingFlagSchema)),
+    mutationFn: () => api.post(`/students/${studentId}/wellbeing-check`, z.array(wellbeingFlagSchema), undefined, token),
   })
 }
 
-export function useWellbeingAck(studentId: string) {
+export function useWellbeingAck(studentId: string, token: string | null) {
   const queryClient = useQueryClient()
   return useMutation<WellbeingFlag, ApiError, { flag_id: string; reviewer_note: string }>({
-    mutationFn: (body) => api.post(`/students/${studentId}/wellbeing-ack`, wellbeingFlagSchema, body),
+    mutationFn: (body) => api.post(`/students/${studentId}/wellbeing-ack`, wellbeingFlagSchema, body, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wellbeing-check', studentId] })
     },

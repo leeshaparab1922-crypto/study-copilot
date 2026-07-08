@@ -16,11 +16,11 @@ type SetEntryStatusBody = {
  * Invalidates the plan-status query on success so PlanCalendar's next
  * render reflects the change (same invalidation pattern as useWellbeingAck).
  */
-export function useSetEntryStatus(studentId: string) {
+export function useSetEntryStatus(studentId: string, token: string | null) {
   const queryClient = useQueryClient()
   return useMutation<StudyPlanEntry, ApiError, SetEntryStatusBody>({
     mutationFn: (body) =>
-      api.patch(`/students/${studentId}/plan/entries`, studyPlanEntrySchema, body),
+      api.patch(`/students/${studentId}/plan/entries`, studyPlanEntrySchema, body, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plan-status', studentId] })
     },

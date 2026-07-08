@@ -21,14 +21,24 @@ export class ApiError extends Error {
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
+  /** Bearer token asserting student ownership (see backend/auth.py's
+   * require_owner) — sent as `Authorization: Bearer <token>` when present.
+   * Optional in TYPE terms so existing call sites (e.g. POST /auth/token
+   * itself) keep compiling without one, but every route guarded by
+   * require_owner will 401 without it. */
+  token?: string | null
 }
 
 async function request<T>(path: string, schema: z.ZodType<T>, options: RequestOptions = {}): Promise<T> {
   let response: Response
   try {
+    const headers: Record<string, string> = {}
+    if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+    if (options.token) headers['Authorization'] = `Bearer ${options.token}`
+
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? 'GET',
-      headers: options.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     })
   } catch (cause) {
@@ -58,7 +68,10 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestOp
 }
 
 export const api = {
-  get: <T>(path: string, schema: z.ZodType<T>) => request(path, schema, { method: 'GET' }),
-  post: <T>(path: string, schema: z.ZodType<T>, body?: unknown) => request(path, schema, { method: 'POST', body }),
-  patch: <T>(path: string, schema: z.ZodType<T>, body?: unknown) => request(path, schema, { method: 'PATCH', body }),
+  get: <T>(path: string, schema: z.ZodType<T>, token?: string | null) =>
+    request(path, schema, { method: 'GET', token }),
+  post: <T>(path: string, schema: z.ZodType<T>, body?: unknown, token?: string | null) =>
+    request(path, schema, { method: 'POST', body, token }),
+  patch: <T>(path: string, schema: z.ZodType<T>, body?: unknown, token?: string | null) =>
+    request(path, schema, { method: 'PATCH', body, token }),
 }

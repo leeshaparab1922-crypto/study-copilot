@@ -2,7 +2,7 @@ import { useOutletContext, Link } from 'react-router-dom'
 import { usePlanStatus } from '@/hooks/usePlan'
 import { ApiError } from '@/lib/api'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 const QUICK_LINKS = [
   { to: '/plan/build', title: 'Build a study plan', desc: 'Paste in each subject’s syllabus and set your calendar.' },
@@ -12,8 +12,8 @@ const QUICK_LINKS = [
 ]
 
 export function Dashboard() {
-  const { studentId } = useOutletContext<Context>()
-  const planStatus = usePlanStatus(studentId)
+  const { studentId, token } = useOutletContext<Context>()
+  const planStatus = usePlanStatus(studentId, token)
 
   const noPlanYet = planStatus.error instanceof ApiError && planStatus.error.httpStatus === 404
 

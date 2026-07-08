@@ -10,11 +10,11 @@ const syllabiSchema = z.array(syllabusStructureSchema)
  * read of flow.state.syllabi (same pattern as usePlanStatus). Used to back
  * subject/topic dropdowns on the Quiz page instead of free-text entry.
  */
-export function useSyllabi(studentId: string, options?: { enabled?: boolean }) {
+export function useSyllabi(studentId: string, token: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['syllabi', studentId],
-    queryFn: () => api.get(`/students/${studentId}/syllabi`, syllabiSchema),
-    enabled: options?.enabled ?? true,
+    queryFn: () => api.get(`/students/${studentId}/syllabi`, syllabiSchema, token),
+    enabled: (options?.enabled ?? true) && !!token,
     retry: false,
   })
 }

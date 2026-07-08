@@ -7,17 +7,17 @@ import { QuizResult } from '@/components/quiz/QuizResult'
 import { JobStatus } from '@/components/shared/JobStatus'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 export function Quiz() {
-  const { studentId } = useOutletContext<Context>()
+  const { studentId, token } = useOutletContext<Context>()
   const [subject, setSubject] = useState('')
   const [topic, setTopic] = useState('')
   const [answers, setAnswers] = useState<QuestionAnswerDraft[]>([])
 
-  const createQuiz = useCreateQuiz(studentId)
-  const submitAttempt = useSubmitAttempt(studentId)
-  const syllabiQuery = useSyllabi(studentId)
+  const createQuiz = useCreateQuiz(studentId, token)
+  const submitAttempt = useSubmitAttempt(studentId, token)
+  const syllabiQuery = useSyllabi(studentId, token)
 
   const quiz = createQuiz.job?.result
   const syllabi = useMemo(() => syllabiQuery.data ?? [], [syllabiQuery.data])

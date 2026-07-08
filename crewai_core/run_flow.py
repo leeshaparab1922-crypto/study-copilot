@@ -100,7 +100,9 @@ async def _run(
     with open(FIXTURES_DIR / "sample_calendar.json", encoding="utf-8") as f:
         raw_calendar = json.load(f)
 
-    flow = StudyPlanFlow(raw_syllabi=raw_syllabi, raw_calendar=raw_calendar)
+    flow = StudyPlanFlow(
+        student_id="cli-student", raw_syllabi=raw_syllabi, raw_calendar=raw_calendar
+    )
     await flow.kickoff_async()
 
     print(f"\n=== Flow state ID (for SQLite inspection): {flow.state.id} ===")
