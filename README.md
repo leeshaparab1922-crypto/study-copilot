@@ -1,3 +1,5 @@
+![Uploading build-plan.png…]()
+<img width="960" height="504" alt="study-calendar" src="https://github.com/user-attachments/assets/f1af143a-9891-4e1e-92e2-51cf358a2a69" />
 # Study Copilot — Adaptive Study Planning System
 
 An AI-driven study planner for school students. A student pastes in each
