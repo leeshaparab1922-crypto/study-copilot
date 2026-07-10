@@ -32,8 +32,9 @@ from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import jobs, registry
+from backend import jobs, registry, tokens
 from backend.app import app
+from backend.tokens import issue_token
 from crewai_core.crews.academic_planner.scheduling import allocate_days_to_subjects
 from crewai_core.models.calendar import CalendarStructure
 from crewai_core.models.plan_revision import PlanRevision
@@ -237,6 +238,14 @@ def client():
         yield c
 
 
+def _auth_headers(student_id: str) -> dict[str, str]:
+    """A valid, correctly-signed Authorization header asserting student_id —
+    threaded into every existing HTTP call in this file that hits a
+    /students/{id}/... route now that backend.auth.require_owner enforces
+    token ownership on all of them (Step 5)."""
+    return {"Authorization": f"Bearer {issue_token(student_id)}"}
+
+
 def _wait_for_job(client, job_id, timeout=15.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -253,6 +262,7 @@ def _create_plan(client, student_id="student-1", subjects=None):
     resp = client.post(
         f"/students/{student_id}/plan",
         json={"subjects": subjects or RAW_SUBJECTS, "raw_calendar": RAW_CALENDAR},
+        headers=_auth_headers(student_id),
     )
     assert resp.status_code == 202
     job_id = resp.json()["job_id"]
@@ -264,12 +274,20 @@ def _create_plan(client, student_id="student-1", subjects=None):
 # ---------------------------------------------------------------------------
 
 
+def test_issue_token_endpoint_returns_valid_token(client):
+    resp = client.post("/auth/token", json={"student_id": "some-id"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["student_id"] == "some-id"
+    assert tokens.verify_token(body["token"]) == "some-id"
+
+
 def test_create_and_get_plan_happy_path(client, monkeypatch):
     _fake_execute_task(monkeypatch)
     job = _create_plan(client)
     assert job["status"] == "done"
 
-    resp = client.get("/students/student-1/plan")
+    resp = client.get("/students/student-1/plan", headers=_auth_headers("student-1"))
     assert resp.status_code == 200
     body = resp.json()
     assert body["ready"] is True
@@ -288,14 +306,41 @@ def test_get_plan_not_ready_before_job_completes(client):
     # in the background, since TestClient drives everything off one
     # event-loop thread).
     registry.create_or_replace("student-2", RAW_SYLLABI, RAW_CALENDAR)
-    resp2 = client.get("/students/student-2/plan")
+    resp2 = client.get("/students/student-2/plan", headers=_auth_headers("student-2"))
     assert resp2.status_code == 200
     assert resp2.json()["ready"] is False
 
 
 def test_get_plan_unknown_student_404(client):
-    resp = client.get("/students/nobody/plan")
+    # A valid, correctly-signed token for "nobody" is required here so the
+    # request clears the ownership check and reaches the real "unknown
+    # student in registry" 404 path — without it this would incorrectly get
+    # 401 instead, testing the wrong thing.
+    resp = client.get("/students/nobody/plan", headers=_auth_headers("nobody"))
     assert resp.status_code == 404
+
+
+def test_get_plan_survives_registry_clear_simulating_restart(client, monkeypatch):
+    """Step 2 regression: registry.get()'s SQLite rehydration fallback
+    means clearing the in-memory registry (simulating a backend process
+    restart) must NOT turn an existing student's plan into a 404 — the
+    real @persist() SQLite row backing this Flow is still on disk."""
+    _fake_execute_task(monkeypatch)
+    job = _create_plan(client)
+    assert job["status"] == "done"
+
+    resp_before = client.get("/students/student-1/plan", headers=_auth_headers("student-1"))
+    assert resp_before.status_code == 200
+    body_before = resp_before.json()
+
+    # Simulate a process restart: only the in-memory dict is lost.
+    registry._registry.clear()
+
+    resp_after = client.get("/students/student-1/plan", headers=_auth_headers("student-1"))
+    assert resp_after.status_code == 200
+    body_after = resp_after.json()
+    assert body_after["ready"] is True
+    assert body_after["study_plan"] == body_before["study_plan"]
 
 
 def test_get_job_unknown_404(client):
@@ -329,6 +374,7 @@ def test_set_entry_status_happy_path_full_cycle(client):
         resp = client.patch(
             "/students/student-status/plan/entries",
             json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": target_status},
+            headers=_auth_headers("student-status"),
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == target_status
@@ -341,6 +387,7 @@ def test_set_entry_status_unknown_student_404(client):
     resp = client.patch(
         "/students/nobody/plan/entries",
         json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+        headers=_auth_headers("nobody"),
     )
     assert resp.status_code == 404
 
@@ -351,6 +398,7 @@ def test_set_entry_status_unknown_entry_422(client):
     resp = client.patch(
         "/students/student-status-2/plan/entries",
         json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": "Not A Real Topic", "status": "completed"},
+        headers=_auth_headers("student-status-2"),
     )
     assert resp.status_code == 422
 
@@ -362,6 +410,7 @@ def test_set_entry_status_before_plan_ready_422(client):
     resp = client.patch(
         "/students/student-status-3/plan/entries",
         json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+        headers=_auth_headers("student-status-3"),
     )
     assert resp.status_code == 422
 
@@ -383,6 +432,7 @@ def test_set_entry_status_does_not_affect_sibling_entries(client):
     resp = client.patch(
         "/students/student-status-4/plan/entries",
         json={"date": "2026-07-10", "subject": SUBJECT, "topic_name": TOPIC, "status": "completed"},
+        headers=_auth_headers("student-status-4"),
     )
     assert resp.status_code == 200
 
@@ -395,7 +445,11 @@ def test_quiz_happy_path(client, monkeypatch):
     _fake_execute_task(monkeypatch)
     _create_plan(client)
 
-    resp = client.post("/students/student-1/quiz", json={"subject": SUBJECT, "topic": TOPIC})
+    resp = client.post(
+        "/students/student-1/quiz",
+        json={"subject": SUBJECT, "topic": TOPIC},
+        headers=_auth_headers("student-1"),
+    )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
     assert job["status"] == "done"
@@ -413,7 +467,7 @@ def test_wellbeing_check_does_not_block(client):
     quickly."""
     _create_plan_without_llm("student-wb")
     start = time.time()
-    resp = client.post("/students/student-wb/wellbeing-check")
+    resp = client.post("/students/student-wb/wellbeing-check", headers=_auth_headers("student-wb"))
     elapsed = time.time() - start
     assert resp.status_code == 200
     assert elapsed < 5.0
@@ -421,14 +475,14 @@ def test_wellbeing_check_does_not_block(client):
 
 def test_wellbeing_check_returns_empty_list_when_nothing_warranted(client):
     _create_plan_without_llm("student-wb-empty")
-    resp = client.post("/students/student-wb-empty/wellbeing-check")
+    resp = client.post("/students/student-wb-empty/wellbeing-check", headers=_auth_headers("student-wb-empty"))
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 def test_wellbeing_check_returns_list_with_quiz_inactivity_flag(client):
     _create_plan_without_llm("student-wb-quiz", backdate_days=10)
-    resp = client.post("/students/student-wb-quiz/wellbeing-check")
+    resp = client.post("/students/student-wb-quiz/wellbeing-check", headers=_auth_headers("student-wb-quiz"))
     assert resp.status_code == 200
     flags = resp.json()
     assert len(flags) == 1
@@ -460,7 +514,7 @@ def test_wellbeing_check_returns_both_flags_when_both_conditions_met(client):
         ]
     )
 
-    resp = client.post("/students/student-wb-both/wellbeing-check")
+    resp = client.post("/students/student-wb-both/wellbeing-check", headers=_auth_headers("student-wb-both"))
     assert resp.status_code == 200
     flags = resp.json()
     assert len(flags) == 2
@@ -469,7 +523,7 @@ def test_wellbeing_check_returns_both_flags_when_both_conditions_met(client):
 def test_wellbeing_ack_lifecycle(client):
     flow, _ = _create_plan_without_llm("student-wb2", backdate_days=10)
 
-    resp = client.post("/students/student-wb2/wellbeing-check")
+    resp = client.post("/students/student-wb2/wellbeing-check", headers=_auth_headers("student-wb2"))
     assert resp.status_code == 200
     flags = resp.json()
     assert len(flags) == 1
@@ -479,6 +533,7 @@ def test_wellbeing_ack_lifecycle(client):
     ack_resp = client.post(
         "/students/student-wb2/wellbeing-ack",
         json={"flag_id": flag["id"], "reviewer_note": "Looked into it, all good."},
+        headers=_auth_headers("student-wb2"),
     )
     assert ack_resp.status_code == 200
     acked = ack_resp.json()
@@ -488,6 +543,7 @@ def test_wellbeing_ack_lifecycle(client):
     missing_resp = client.post(
         "/students/student-wb2/wellbeing-ack",
         json={"flag_id": "does-not-exist", "reviewer_note": "n/a"},
+        headers=_auth_headers("student-wb2"),
     )
     assert missing_resp.status_code == 404
 
@@ -543,7 +599,9 @@ def test_attempts_reports_plan_optimizer_triggered_true_when_struggling(client, 
     _create_plan(client)
 
     attempt = _build_attempt(SUBJECT, TOPIC, accuracy=0.2)  # well below Struggling cutoff
-    resp = client.post("/students/student-1/attempts", json=attempt.model_dump())
+    resp = client.post(
+        "/students/student-1/attempts", json=attempt.model_dump(), headers=_auth_headers("student-1")
+    )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
     assert job["status"] == "done"
@@ -556,7 +614,9 @@ def test_attempts_reports_plan_optimizer_triggered_false_when_mastered(client, m
     _create_plan(client)
 
     attempt = _build_attempt(SUBJECT, TOPIC, accuracy=1.0)  # Mastered
-    resp = client.post("/students/student-1/attempts", json=attempt.model_dump())
+    resp = client.post(
+        "/students/student-1/attempts", json=attempt.model_dump(), headers=_auth_headers("student-1")
+    )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
     assert job["status"] == "done"
@@ -574,7 +634,9 @@ def test_second_plan_call_discards_prior_quiz_history(client, monkeypatch):
     _create_plan(client)
 
     attempt = _build_attempt(SUBJECT, TOPIC, accuracy=1.0)
-    resp = client.post("/students/student-1/attempts", json=attempt.model_dump())
+    resp = client.post(
+        "/students/student-1/attempts", json=attempt.model_dump(), headers=_auth_headers("student-1")
+    )
     job = _wait_for_job(client, resp.json()["job_id"])
     assert job["status"] == "done"
 
@@ -643,6 +705,7 @@ def test_plan_generation_guardrail_exhaustion_returns_502(client, monkeypatch):
     resp = client.post(
         "/students/student-bad-plan/plan",
         json={"subjects": RAW_SUBJECTS, "raw_calendar": RAW_CALENDAR},
+        headers=_auth_headers("student-bad-plan"),
     )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
@@ -661,6 +724,7 @@ def test_plan_creation_rejects_mismatched_subject_text_returns_502(client, monke
     resp = client.post(
         "/students/student-mismatch/plan",
         json={"subjects": RAW_SUBJECTS, "raw_calendar": RAW_CALENDAR},
+        headers=_auth_headers("student-mismatch"),
     )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
@@ -673,7 +737,9 @@ def test_quiz_unknown_topic_guardrail_exhaustion_returns_502(client, monkeypatch
     _create_plan(client)
 
     resp = client.post(
-        "/students/student-1/quiz", json={"subject": SUBJECT, "topic": "Not A Real Topic"}
+        "/students/student-1/quiz",
+        json={"subject": SUBJECT, "topic": "Not A Real Topic"},
+        headers=_auth_headers("student-1"),
     )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
@@ -691,7 +757,9 @@ def test_quiz_unknown_subject_returns_422(client, monkeypatch):
     _create_plan(client)
 
     resp = client.post(
-        "/students/student-1/quiz", json={"subject": "NotASubject", "topic": TOPIC}
+        "/students/student-1/quiz",
+        json={"subject": "NotASubject", "topic": TOPIC},
+        headers=_auth_headers("student-1"),
     )
     assert resp.status_code == 202
     job = _wait_for_job(client, resp.json()["job_id"])
@@ -713,9 +781,80 @@ def test_quiz_before_plan_job_completes_returns_409(client, monkeypatch):
     registry.create_or_replace("student-slow", RAW_SYLLABI, RAW_CALENDAR)
 
     quiz_resp = client.post(
-        "/students/student-slow/quiz", json={"subject": SUBJECT, "topic": TOPIC}
+        "/students/student-slow/quiz",
+        json={"subject": SUBJECT, "topic": TOPIC},
+        headers=_auth_headers("student-slow"),
     )
     assert quiz_resp.status_code == 202
     job = _wait_for_job(client, quiz_resp.json()["job_id"])
     assert job["status"] == "failed"
     assert job["http_status"] == 409
+
+
+# ---------------------------------------------------------------------------
+# Step 5: ownership enforcement (backend.auth.require_owner)
+# ---------------------------------------------------------------------------
+
+
+def test_no_authorization_header_returns_401(client):
+    resp = client.get("/students/student-1/plan")
+    assert resp.status_code == 401
+
+
+def test_malformed_authorization_header_returns_401(client):
+    resp = client.get(
+        "/students/student-1/plan",
+        headers={"Authorization": "NotBearer sometoken"},
+    )
+    assert resp.status_code == 401
+
+
+def test_garbage_token_returns_401(client):
+    resp = client.get(
+        "/students/student-1/plan",
+        headers={"Authorization": "Bearer this-is-not-a-real-token"},
+    )
+    assert resp.status_code == 401
+
+
+def test_valid_token_for_different_student_returns_403(client):
+    """The single most important test in this suite: a correctly-signed
+    token issued for student "A" must not grant access to student "B"'s
+    route — this is the literal cross-student-access scenario Step 5 exists
+    to prevent."""
+    resp = client.get(
+        "/students/student-b/plan",
+        headers=_auth_headers("student-a"),
+    )
+    assert resp.status_code == 403
+
+
+def test_tampered_token_with_swapped_student_id_returns_401(client):
+    """A token issued for one student, with its payload decoded/modified to
+    claim a DIFFERENT student_id but the ORIGINAL signature bytes left
+    unchanged, must fail signature verification (401) — proving the HMAC
+    actually protects the payload from being silently swapped, not just
+    that some signature is present."""
+    token = issue_token("student-a")
+    payload_segment, signature_segment = token.split(".")
+
+    import base64
+    import json
+
+    def _b64url_decode(text: str) -> bytes:
+        padded = text + "=" * (-len(text) % 4)
+        return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+    def _b64url_encode(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+    payload = json.loads(_b64url_decode(payload_segment))
+    payload["student_id"] = "student-b"
+    tampered_payload_segment = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    tampered_token = f"{tampered_payload_segment}.{signature_segment}"
+
+    resp = client.get(
+        "/students/student-b/plan",
+        headers={"Authorization": f"Bearer {tampered_token}"},
+    )
+    assert resp.status_code == 401

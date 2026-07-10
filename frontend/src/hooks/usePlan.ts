@@ -15,11 +15,11 @@ const planStatusSchema = z.object({
  * polls on an interval only while ready is false, distinct from
  * useJobPoll's job-record polling used for the POST /plan kickoff itself.
  */
-export function usePlanStatus(studentId: string, options?: { enabled?: boolean }) {
+export function usePlanStatus(studentId: string, token: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['plan-status', studentId],
-    queryFn: () => api.get(`/students/${studentId}/plan`, planStatusSchema),
-    enabled: options?.enabled ?? true,
+    queryFn: () => api.get(`/students/${studentId}/plan`, planStatusSchema, token),
+    enabled: (options?.enabled ?? true) && !!token,
     retry: false,
     refetchInterval: (query) => (query.state.data?.ready ? false : 3000),
     refetchIntervalInBackground: true,

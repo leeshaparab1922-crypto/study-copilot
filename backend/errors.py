@@ -37,6 +37,20 @@ def job_not_found_error(job_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"No job found with id '{job_id}'.")
 
 
+def ownership_mismatch_error(student_id: str) -> HTTPException:
+    """403 — the request's verified token asserts a DIFFERENT student_id
+    than the one in this route's own path (see backend/auth.py's
+    require_owner). Distinct from student_not_found_error (404, genuinely
+    unknown student) and from a 401 (missing/malformed/unverifiable token,
+    constructed directly in backend/auth.py since there's no existing 401
+    helper here to reuse) — this is a valid token that simply doesn't own
+    the resource its own request is addressing."""
+    return HTTPException(
+        status_code=403,
+        detail=f"Token does not grant access to student '{student_id}'.",
+    )
+
+
 def classify_job_exception(exc: BaseException) -> int:
     """Map an exception raised inside a background job's coroutine to an
     HTTP status code, stored on the job record for GET /jobs/{job_id} to

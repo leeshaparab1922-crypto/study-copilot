@@ -93,6 +93,7 @@ from crewai_core.crews.assessment_designer.crew import AssessmentDesignerCrew
 from crewai_core.crews.plan_generator.crew import PlanGeneratorCrew
 from crewai_core.crews.plan_optimizer.crew import PlanOptimizerCrew
 from crewai_core.crews.syllabus_analyst.crew import SyllabusAnalystCrew
+from crewai_core.flow_id import derive_flow_id
 from crewai_core.models.calendar import CalendarStructure
 from crewai_core.models.flow_state import StudyPlanFlowState
 from crewai_core.models.plan_revision import PlanRevision
@@ -227,12 +228,21 @@ class StudyPlanFlow(Flow[StudyPlanFlowState]):
 
     def __init__(
         self,
-        raw_syllabi: list[dict],
-        raw_calendar: dict,
+        student_id: str,
+        raw_syllabi: list[dict] | None = None,
+        raw_calendar: dict | None = None,
         pre_analyzed_syllabi: list[SyllabusStructure] | None = None,
+        _initial_state: StudyPlanFlowState | None = None,
         **kwargs,
     ):
-        """pre_analyzed_syllabi: already-converted SyllabusStructure objects
+        """student_id: required. Deterministically derives this Flow's
+        persisted state id (crewai_core/flow_id.py's derive_flow_id) so the
+        same student_id always maps to the same underlying CrewAI SQLite
+        flow_uuid — this is what lets backend/registry.py's "start over"
+        replace semantics and (Step 2) rehydration-after-restart both work
+        without a separate id lookup table.
+
+        pre_analyzed_syllabi: already-converted SyllabusStructure objects
         (e.g. from backend/routes.py's single syllabus-conversion step,
         which already ran its own guardrail-checked extraction). When
         given, analyze_all_syllabi() uses these directly and does NOT call
@@ -243,11 +253,44 @@ class StudyPlanFlow(Flow[StudyPlanFlowState]):
         correct. raw_syllabi is still required and used for state.grade in
         that case; when pre_analyzed_syllabi is None (e.g. the CLI's raw
         fixture JSON), behavior is unchanged — one SyllabusAnalystCrew call
-        per entry in raw_syllabi, exactly as before."""
+        per entry in raw_syllabi, exactly as before.
 
-        super().__init__(**kwargs)
-        self._raw_syllabi = raw_syllabi
-        self._raw_calendar = raw_calendar
+        raw_syllabi / raw_calendar are optional (default None) ONLY to
+        support Step 2's rehydration path (backend/registry.py's get(),
+        reconstructing a Flow from a persisted SQLiteFlowPersistence state
+        after a process restart, where the original raw inputs were never
+        persisted — only the already-parsed SyllabusStructure/
+        CalendarStructure survive in state.syllabi/state.calendar). Every
+        NORMAL (non-rehydration) call site — backend/registry.py's
+        create_or_replace, crewai_core/run_flow.py's CLI entrypoint — still
+        always supplies real raw_syllabi/raw_calendar; this default only
+        matters for a rehydrated-for-reading Flow that will never call
+        kickoff_async() again (the only methods that read
+        self._raw_syllabi/self._raw_calendar are the @start() methods
+        analyze_all_syllabi/parse_calendar, which a rehydrated Flow never
+        re-invokes). Chose this "optional params" approach over a separate
+        factory classmethod because it doesn't weaken required-ness for
+        the normal path (both params are still required in practice by
+        every real caller) and avoids a second code path for constructing
+        the same class.
+
+        _initial_state: internal-only, used exclusively by
+        backend/registry.py's rehydration path to pass an already-built
+        StudyPlanFlowState (loaded from SQLite) straight through as this
+        Flow's initial_state, instead of building a fresh one from
+        student_id. Leading underscore signals "not a normal public
+        constructor argument" — normal callers never pass this.
+        """
+
+        if _initial_state is not None:
+            initial_state = _initial_state
+        else:
+            initial_state = StudyPlanFlowState(
+                id=derive_flow_id(student_id), student_id=student_id
+            )
+        super().__init__(initial_state=initial_state, **kwargs)
+        self._raw_syllabi = raw_syllabi if raw_syllabi is not None else []
+        self._raw_calendar = raw_calendar if raw_calendar is not None else {}
         self._pre_analyzed_syllabi = pre_analyzed_syllabi
 
     @start()

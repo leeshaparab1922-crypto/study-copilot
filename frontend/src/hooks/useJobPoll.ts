@@ -25,12 +25,17 @@ export function useJobPoll<TResult>(options: {
   resultSchema: z.ZodType<TResult>
   /** Polling interval while status is "pending". */
   pollIntervalMs?: number
+  /** Bearer token for the startPath POST (see backend/auth.py's
+   * require_owner — startPath always addresses a student_id). GET
+   * /jobs/{job_id} itself has no student_id param and is not
+   * ownership-guarded, so it needs no token. */
+  token?: string | null
 }) {
   const queryClient = useQueryClient()
   const jobResultSchema = jobSchema(options.resultSchema)
 
   const startMutation = useMutation({
-    mutationFn: (body?: unknown) => api.post(options.startPath, jobIdResponseSchema, body),
+    mutationFn: (body?: unknown) => api.post(options.startPath, jobIdResponseSchema, body, options.token),
   })
 
   const jobId = startMutation.data?.job_id

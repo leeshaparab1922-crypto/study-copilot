@@ -10,10 +10,10 @@ import { CalendarForm } from '@/components/plan/CalendarForm'
 import { JobStatus } from '@/components/shared/JobStatus'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 export function PlanBuilder() {
-  const { studentId } = useOutletContext<Context>()
+  const { studentId, token } = useOutletContext<Context>()
   const navigate = useNavigate()
   const [subjects, setSubjects] = useState<RawSubjectSyllabus[]>([])
   const [calendar, setCalendar] = useState(emptyCalendar())
@@ -21,6 +21,7 @@ export function PlanBuilder() {
   const planJob = useJobPoll({
     startPath: `/students/${studentId}/plan`,
     resultSchema: studyPlanSchema,
+    token,
   })
 
   const canSubmit = subjects.length > 0 && calendar.term_start && calendar.term_end && !planJob.isRunning

@@ -4,7 +4,7 @@ import { useSetEntryStatus } from '@/hooks/useSetEntryStatus'
 import { ApiError } from '@/lib/api'
 import { deriveDisplayStatus, type DisplayStatus, type EntryStatus } from '@/lib/schemas/studyPlan'
 
-type Context = { studentId: string }
+type Context = { studentId: string; token: string | null }
 
 function formatDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`)
@@ -74,9 +74,9 @@ function StatusBadge({
 }
 
 export function PlanCalendar() {
-  const { studentId } = useOutletContext<Context>()
-  const planStatus = usePlanStatus(studentId)
-  const setEntryStatus = useSetEntryStatus(studentId)
+  const { studentId, token } = useOutletContext<Context>()
+  const planStatus = usePlanStatus(studentId, token)
+  const setEntryStatus = useSetEntryStatus(studentId, token)
 
   if (planStatus.isLoading) {
     return <p style={{ color: 'var(--ink-soft)' }}>Loading…</p>
