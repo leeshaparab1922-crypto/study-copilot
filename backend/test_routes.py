@@ -791,7 +791,7 @@ def test_quiz_before_plan_job_completes_returns_409(client, monkeypatch):
     assert job["http_status"] == 409
 
 
-    # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Step 5: ownership enforcement (backend.auth.require_owner)
 # ---------------------------------------------------------------------------
 

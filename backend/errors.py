@@ -51,7 +51,6 @@ def ownership_mismatch_error(student_id: str) -> HTTPException:
     )
 
 
-
 def classify_job_exception(exc: BaseException) -> int:
     """Map an exception raised inside a background job's coroutine to an
     HTTP status code, stored on the job record for GET /jobs/{job_id} to

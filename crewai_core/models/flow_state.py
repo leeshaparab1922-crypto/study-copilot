@@ -18,7 +18,7 @@ class StudyPlanFlowState(FlowState):
     always sets this id explicitly via crewai_core/flow_id.py's
     derive_flow_id(student_id) — deterministic, so the same student_id
     always maps to the same persisted SQLite flow_uuid.
-    
+
     quiz_history, weak_topics, and wellbeing_flags are all typed now
     (Steps 6 and 8) — QuizAttempt, WeakTopicUpdate, and WellbeingFlag
     respectively. No more list[dict] placeholders.
